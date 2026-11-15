@@ -1,5 +1,29 @@
 # Notes for the next session
 
+## Session 2 (2026-11-15): cold numbers and what was done
+
+Score = CPU of one cold `node main.ts` run, so measure with `tools/coldbench.sh [N]` (fresh processes, alternating
+ours/baseline, median user+sys). Gate every parser change with `tools/checkall.sh` (practice + 6 fuzz draws in
+/home/agent/makefun/mdfuzz/s1..s6/out, all must be 720/720).
+
+| state | ours | baseline | ratio |
+|---|---|---|---|
+| start (lean pipeline only) | 1.150 s | 1.190 s | 1.035x |
+| + fork, inline first-char dispatch | 1.060 s | 1.110 s | 1.047x |
+| + fe() early return (no `*_~`) | 1.020 s | 1.060 s | 1.039x (noise) |
+
+The machine drifts by about 5% between runs, so only compare ratios from the same coldbench run.
+- marked is now forked as `marked-fork.js` (vendor/ stays as the untouched reference). The Lexer's inline loop uses private
+  `#` methods, so overriding prototypes from outside cannot reach it; edit the fork instead (with node string replaces on
+  unique anchors, since the file is minified).
+- Done: first-character dispatch in `#t` (rule first chars checked: `\` escape/br, `<` tag/autolink, `[`/`!` link/reflink,
+  `*`/`_` emStrong (+url for `_`), `` ` `` codespan, space br, `~` del, `[A-Za-z0-9._+-]` url); `fe()` early return.
+- The gains are small because cold cost is dominated by start-up/JIT, not by the skipped regex calls.
+- Next, ranked: (1) plain-text fast path that skips `#n`/Ae/inlineText for runs with no special chars; (2) cache the list
+  tokenizer's per-list RegExps; (3) block first-char dispatch (skip lheading/table/etc.); (4) escape `P` quick return;
+  (5) skip `#n` replace passes piecewise (reflinkSearch only when links non-empty is already done; blockSkip only if
+  `` ` `` or `<` present).
+
 ## Where the time goes (practice set, `node --cpu-prof`, 20 passes x 720 cases, self time)
 
 | self % | where |
