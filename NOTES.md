@@ -1,5 +1,26 @@
 # Notes for the next session
 
+## Session 5 (2026-11-15): #t last-text local kept; same fix in blockTokens neutral, reverted
+
+| state | ours | baseline | ratio |
+|---|---|---|---|
+| + `#t` keeps the last text token in a local (pinned A/B vs prior HEAD: 0.750 vs 0.770 s) | 0.730 s | 0.820 s | 1.123x (coldbench 9, unpinned, noisy) |
+
+- Plan source: /home/agent/makefun/briefs/mdbolt_wf_plan_s224.md (8 ranked inline items). Item 1 is done.
+- Kept: `#t` holds `mL` (last pushed text token) and `mN` (`n.length` right after that push). It merges only when
+  `mN===n.length`. Any other push changes the length, so the local becomes invalid without touching every push
+  site. It is refreshed from the array at entry and after an extension push. This is exact because `n` is only
+  appended to inside this loop and default tokenizers only push text from reflink and inlineText.
+- Reverted: the same idea in `blockTokens` (`bT/bK/bN` for the last paragraph/text, refreshed at entry because the
+  blockquote tokenizer passes back its own `o`). 7/7 pass but pinned A/B gave 0.680 vs 0.670 s, so not faster.
+- A/B now runs pinned: `taskset -c 3` around each `node` in the alternating loop, 13 runs each. That is less noisy
+  than unpinned runs.
+- Next, in the brief's order: (1) fe() with `lastIndexOf` per delimiter and the mask stack as an array field
+  instead of the WeakMap. (2) emStrong/del without `[...]` spreads, using `test` instead of exec/match for booleans,
+  reading group 5||6 once, with no short-circuit surrogate compares. Check `--trace-deopt` for a single compile.
+  (3) Fast text-run end search (lastIndexOf "@" guard, one global stop search). (4) Skip mask push/try when there is
+  no `*_~`. (5) Skip mask passes that cannot match. (6) url pre-check. (7) `!` not followed by `[`.
+
 ## Session 4 (2026-11-15): inline plain-text fast path kept; block dispatch and list split reverted
 
 | state | ours | baseline | ratio |
