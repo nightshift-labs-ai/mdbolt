@@ -1,5 +1,38 @@
 # Notes for the next session
 
+## Session 6 (2026-11-15): blockTokens deopt fixed (3 commits kept, all faster)
+
+| state | ours | baseline | ratio |
+|---|---|---|---|
+| + no extension closures in blockTokens (pinned A/B vs prior HEAD: 0.720 vs 0.740 s) | | | |
+| + last block type in Lexer field `lbt` (pinned A/B: 0.700 vs 0.710 s, means 0.689/0.707) | | | |
+| + list skips tab-expansion replace when line has no tab (pinned A/B: 0.660 vs 0.690 s) | 0.700 s | 0.840 s | 1.200x (coldbench 9, unpinned) |
+
+- Plan source: SYNTHESIS of /home/agent/makefun/briefs/mdbolt_wf_plan_s224.md. Item 1 is done; item 2 is partly done
+  (tab skip only).
+- Removed `extensions?.block?.some(closure)` and the `startBlock` closure from blockTokens. Both are always null with
+  default options, and the closures forced `e`, `t`, `r` and `this` into a heap context. `o===e` now, so the
+  paragraph branch sets `n=!1`.
+- `lbt`: the Lexer constructor declares `this.lbt=""`. blockTokens seeds a local `bt` (from `lbt` if `t` is not
+  empty, else ""), sets it at each push to that tokenizer's fixed type (fences and code give "code", lheading gives
+  "heading"; merges leave it unchanged), fetches `t[t.length-1]` only inside merge branches, and writes `bt` back to
+  `lbt` on return. The blockquote tokenizer reads `this.lexer.lbt` instead of `o.at(-1)?.type`, and after replacing
+  `o`'s last token with a re-tokenized blockquote or list it sets `lbt` to that type. This is exact because only
+  blockquote passes a non-empty array (lists pass `[]`, and lex passes a fresh `this.tokens`). A cold
+  `--trace-deopt` now shows no blockTokens bailout (only blockquote: 1 insufficient-feedback deopt, emStrong: 1).
+- Tab skip: `J` returns a tab-free string unchanged, so `f.indexOf("\t")<0?f:f.replace(leadingSpaceTab,...)` is
+  exact (both in the item header and in the continuation loop).
+- Checked: the six list break regexes are already memoized per min(3,R-1) by marked's `D()`, so caching them gains
+  nothing.
+- Differential fuzz (throwaway script in /tmp, not in the repo): 200k random quote/list/fence/setext/table/lazy-line
+  documents and 200k tab/NBSP/wide-bullet list documents compared with vendor/marked: 0 diffs each.
+- Next (in order): (1) the rest of item 2, the list continuation fast path (indexOf/slice lines, a leading-space
+  count with the fast path when the run is >= R and the next character is not a tab, a backward scan instead of
+  the double-blank regex, a plain loop for looseness). (2) Item 3: fe() by lastIndexOf per delimiter, the mask
+  stack as a Tokenizer array field instead of the WeakMap, and no push/try when the source has no `*_~`.
+  (3) Item 4: emStrong deopt (no spreads, `test`, group 5||6 read once). (4) Items 5-6: cheap guards, fast text-run
+  end search.
+
 ## Session 5 (2026-11-15): #t last-text local kept; same fix in blockTokens neutral, reverted
 
 | state | ours | baseline | ratio |
