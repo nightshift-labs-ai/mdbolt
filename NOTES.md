@@ -15,6 +15,8 @@
     emoji/lone-surrogate strings): 1.010 s vs 1.000 s.
   - lheading pre-check `/\n(?: {0,3}[=-]|\s*?\n)/` (skip lheading when the first hit is a blank line; exact, with 0
     diffs in 80k random setext strings): 0.810 s vs 0.810 s.
+  - list item loop skips its 6 break regexes when the line's first non-space char is not one of
+    `` `~#<>*+-_ `` or a digit (exact, with 0 diffs in 80k random list strings): 0.850 s vs 0.820 s, so not faster.
 - Measured: `node -e 0` and importing parse.js each cost ~10 ms CPU, so start-up does not matter. The ~0.8 s is
   parsing + JSON + JIT warm-up, about 2x the warm per-pass time. Changes worth ~1% are lost in cold-run noise.
   Only structural cuts in work done per character (fewer JS steps in interpreter/baseline tiers, fewer regex
@@ -26,7 +28,8 @@
   untouched inline cost (text RegExp 5.8% + `#n` 2.8% + inlineText 1.6%). (2) Block first-char dispatch, so that a
   line starting with a plain letter skips the code/fences/heading/hr/blockquote/list/html/def regexes (table and
   lheading can still start with a letter, so keep those).
-  (3) In the list item loop, test the 6 break regexes only when the line's first non-space char can start one.
+  (3) Fewer allocations per token (GC is 9.3% of the baseline profile), e.g. avoid the per-line `split`/`substring`
+  in the list loop by working with offsets.
 
 ## Session 2 (2026-11-15): cold numbers and what was done
 
