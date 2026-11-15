@@ -1,5 +1,33 @@
 # Notes for the next session
 
+## Session 3 (2026-11-15): list RegExp cache; two neutral attempts reverted
+
+| state | ours | baseline | ratio |
+|---|---|---|---|
+| + list item RegExp cached per bullet (`liRe` Map) | 0.830 s | 0.900 s | 1.084x |
+| same commit, re-measured at session end | 0.770 s | 0.840 s | 1.091x |
+
+- Kept: `listItemRegex(r)` was rebuilt for every list. It now comes from a module-level Map keyed by the bullet
+  pattern. The regex is not global/sticky, so sharing it is stateless. The per-indent regexes were already memoised
+  by marked's `D()`.
+- Reverted, because a direct cold A/B against HEAD (13 alternating runs) showed no difference:
+  - emStrong without `[...str]` spreads (surrogate-aware `charCodeAt` arithmetic; exact, with 0 diffs in 60k random
+    emoji/lone-surrogate strings): 1.010 s vs 1.000 s.
+  - lheading pre-check `/\n(?: {0,3}[=-]|\s*?\n)/` (skip lheading when the first hit is a blank line; exact, with 0
+    diffs in 80k random setext strings): 0.810 s vs 0.810 s.
+- Measured: `node -e 0` and importing parse.js each cost ~10 ms CPU, so start-up does not matter. The ~0.8 s is
+  parsing + JSON + JIT warm-up, about 2x the warm per-pass time. Changes worth ~1% are lost in cold-run noise.
+  Only structural cuts in work done per character (fewer JS steps in interpreter/baseline tiers, fewer regex
+  calls) will show up.
+- A/B method: `git archive HEAD | tar -x -C /tmp/abhead`, then alternate `node main.ts` and `node /tmp/abhead/main.ts`
+  (13 runs each, median user+sys). This is more sensitive than comparing the ratios of two coldbench runs.
+- Next, ranked: (1) plain-text fast path in `#t`: when a run has none of ``\<[!*_`~`` and no `@`/`://`/`www.`/double
+  space+newline, emit a single text token and skip the GFM text regex, `#n` and inlineText. This is the largest
+  untouched inline cost (text RegExp 5.8% + `#n` 2.8% + inlineText 1.6%). (2) Block first-char dispatch, so that a
+  line starting with a plain letter skips the code/fences/heading/hr/blockquote/list/html/def regexes (table and
+  lheading can still start with a letter, so keep those).
+  (3) In the list item loop, test the 6 break regexes only when the line's first non-space char can start one.
+
 ## Session 2 (2026-11-15): cold numbers and what was done
 
 Score = CPU of one cold `node main.ts` run, so measure with `tools/coldbench.sh [N]` (fresh processes, alternating
