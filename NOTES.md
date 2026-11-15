@@ -1,5 +1,27 @@
 # Notes for the next session
 
+## Session 4 (2026-11-15): inline plain-text fast path kept; block dispatch and list split reverted
+
+| state | ours | baseline | ratio |
+|---|---|---|---|
+| + plain-text fast path in `#e` (A/B vs prior HEAD: 0.870 vs 0.900 s) | 0.790 s | 0.910 s | 1.152x (coldbench 9) |
+
+- Kept: `#e` returns early when `mbPlain` (`/[\\<!\[`*_~@]|  \n|:\/\/|www\.|mailto:|xmpp:|http/i`) does not match.
+  It emits the single text token that inlineText would produce (`Ie`-escaped unless inRawBlock, merged into a
+  preceding text token). It is skipped when inline extensions exist. Note that the 18.1.3 text rule stops before any
+  case-insensitive `http`, even without `://`, and `Ie` depends on context (`&...;`), so every split point has to be
+  excluded, not only the rule start characters. 0 diffs in 80k random strings.
+- Reverted (neutral in cold A/B, 0 diffs in random tests, so exact but not faster):
+  - Block first-char dispatch (skip code..def when the first char is >32 and not ``#*+-_`~<>[`` or a digit):
+    0.820 vs 0.800 s, then 0.870 vs 0.880 s.
+  - The list loop uses `indexOf`+`slice` instead of `split("\n",1)[0]`: 0.840 vs 0.830 s.
+- Tool: a random differential test against `vendor/marked/marked.esm.js` (inline it with `node --input-type=module -e`;
+  keep it out of the repo, since fuzz data is not committed).
+- Next, ranked: (1) extend the fast path inside `#t`: when the *remaining* run passes `mbPlain`, emit it as one text
+  token there too (this catches tails after an emphasis or link). (2) A cheaper `#n` mask: build it only when the run
+  really has `*`/`_` delimiters next to word boundaries. (3) Profile cold again with `--cpu-prof` to see what is left
+  now. Block/list micro-cuts do not show up in cold runs.
+
 ## Session 3 (2026-11-15): list RegExp cache; two neutral attempts reverted
 
 | state | ours | baseline | ratio |
