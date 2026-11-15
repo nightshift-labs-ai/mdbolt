@@ -1,5 +1,36 @@
 # Notes for the next session
 
+## Session 7 (2026-11-15): list continuation fast path and fe/mask stack kept; list header cleanup and emStrong spreads neutral, reverted
+
+| state | ours | baseline | ratio |
+|---|---|---|---|
+| + list continuation fast path (pinned A/B vs prior HEAD: 0.710 vs 0.730 s, means 0.723/0.740) | | | |
+| + fe() by lastIndexOf, mask stack field `mS`, no push/try without `*_~` (pinned A/B: 0.670/0.670 s, means 0.676/0.692; rerun 0.620 vs 0.640 s) | 0.590 s | 0.770 s | 1.305x (coldbench 9, pinned `NODE=taskset -c 3 node` wrapper) |
+
+- Unpinned coldbench gave 0.700 vs 0.970 s (1.386x), but the baseline swung from 0.84 to 0.97 s, so the README
+  quotes the pinned 1.31x.
+- List fast path (inner continuation loop, non-pedantic only): the line comes from indexOf/slice. Count the leading
+  spaces `c`. If the line is empty, or `c>=R` and the next char is not a tab (all-space lines included), append
+  `"\n"+U.slice(R)`, set `m` to that slice, set `y` (true if all spaces, false if the first non-space char is
+  33..126, else `!U.trim()`), and continue. This is exact because each break regex is `^ {0,min(3,R-1)}` followed
+  by a non-space char, and `leadingSpaceTab` is `/^[ \t]+/`, so J is the identity when the run has no tab.
+- Reverted, all 7/7 and 0 fuzz diffs but not faster (pinned 0.740/0.740 then 0.740 vs HEAD 0.700): drop the `s`
+  closure (inline `n.length-e.length`), header newline drop by charCode, a backward scan instead of
+  `doubleBlankLine`, a plain loop for looseness.
+- fe: for each delimiter, start at lastIndexOf, walk back to the run start, reject if it is at index 0 or the char
+  before is space/\t/\n/\r/\f, else search again before the run. This gives the same result as the forward loop
+  (the last qualifying maximal run start). Ae/Ee/ze/Me use `tokenizer.mS` (declared as a class field). The inline
+  entry returns `#t(e,e,t)` directly when `e` has no `*_~` and n===e. ze/Me still fall back to fe() when the top
+  does not match, so the stack is only a cache.
+- Reverted (neutral: 0.610/0.620, then 0.650/0.640 s with a worse mean): emStrong without code-point spreads
+  (cpL helper, surrogate-pair checks). With these spreads in, a cold `--trace-deopt` shows only 1 emStrong and
+  1 blockquote eager deopt.
+- Fuzz (throwaway scripts in /tmp/s7fz, not in the repo): 540k list docs (tabs, NBSP, \v, wide bullets, blank
+  lines) and 600k emphasis docs (including lone surrogates and astral chars): 0 diffs against vendor/marked.
+- Next: (1) Items 5-6 of the SYNTHESIS (cheap guards, a fast text-run end search). (2) emStrong: read group 5||6 once
+  and use `test` for unicodeAlphaNumeric (check its flags first); the spreads alone were neutral. (3) Item 2 of the
+  BLOCK report (first-char dispatch plus table/setext pre-filters) if it has not been tried in this form.
+
 ## Session 6 (2026-11-15): blockTokens deopt fixed (3 commits kept, all faster)
 
 | state | ours | baseline | ratio |
