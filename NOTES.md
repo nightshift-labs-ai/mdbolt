@@ -17,9 +17,10 @@
   - The list loop uses `indexOf`+`slice` instead of `split("\n",1)[0]`: 0.840 vs 0.830 s.
 - Tool: a random differential test against `vendor/marked/marked.esm.js` (inline it with `node --input-type=module -e`;
   keep it out of the repo, since fuzz data is not committed).
-- Next, ranked: (1) extend the fast path inside `#t`: when the *remaining* run passes `mbPlain`, emit it as one text
-  token there too (this catches tails after an emphasis or link). (2) A cheaper `#n` mask: build it only when the run
-  really has `*`/`_` delimiters next to word boundaries. (3) Profile cold again with `--cpu-prof` to see what is left
+  - The same fast path inside `#t` for the remaining run (a tail after emphasis/link), as an `mbPlain` test at the top
+    of each iteration: 0.880 vs 0.880 s, then 0.990 vs 0.970 s. The extra regex test per iteration cancels the gain.
+- Next, ranked: (1) A cheaper `#n` mask: build it only when the run
+  really has `*`/`_` delimiters next to word boundaries. (2) Profile cold again with `--cpu-prof` to see what is left
   now. Block/list micro-cuts do not show up in cold runs.
 
 ## Session 3 (2026-11-15): list RegExp cache; two neutral attempts reverted
