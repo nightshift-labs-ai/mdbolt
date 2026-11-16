@@ -1,5 +1,24 @@
 # Notes for the next session
 
+## Session 11 (2026-11-16): list allocation cuts neutral, reverted; `#n` pass counts
+
+No parser change kept. Cold numbers unchanged from session 10 (HEAD pinned A/B runs this session: 0.630-0.660 s).
+
+- Reverted (exact: 7/7 + s7-s10, 0/60k diffs in a random-list fuzz vs vendor/marked, but NOT faster): in `list`,
+  `t[2].split("\n",1)[0]` and `e.split("\n",1)[0]` replaced by indexOf/slice, and the loose check's
+  `filter(type==="space")` + `some(anyLine.test)` replaced by one loop (`anyLine` is `/\n.*\n/`, not global, so it
+  is a pure predicate). Pinned A/B (13/13/13/13/21 runs): medians 0.620 vs 0.630, 0.650/0.650, 0.630/0.630,
+  0.640 vs 0.650, 0.660/0.660; means within +-0.007 s either way. Small per-item allocations in `list` are not
+  where the GC time goes. The per-indent regex factories (`nextBulletRegex` etc.) are already cached by `D()`.
+- `#n` pass counts on the practice set (instrumented /tmp copy): 11,894 calls over 2.19 MB of inline source
+  (avg 184 chars). Reflink replace runs 5,191 times, only 46 of them with an empty `tokens.links` (that is why
+  session 10's empty-links skip was neutral). Punctuation pass 5,628 runs, blockSkip pass 7,059 runs.
+- Next: (1) `#n` reflink pass: most docs define refs, so a skip needs something else, e.g. run it only when the
+  source has `]` followed by `[` or a label that is in `links` (prove it exactly; the callback is a no-op for
+  labels not in `links`). (2) GC 13.5%: allocation-profile first (`--heap-prof` or `--trace-gc` counts on a cold
+  run) to find the real allocators before cutting; guessing at `list` failed. (3) SYNTHESIS item 7 (block
+  first-char dispatch), `blockTokens` self 5.4%.
+
 ## Session 10 (2026-11-16): cold profile of HEAD; no-@/: text regex kept; bigger semi-space no gain
 
 | state | ours | baseline | ratio |
