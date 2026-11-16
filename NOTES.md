@@ -1,5 +1,24 @@
 # Notes for the next session
 
+## Session 8 (2026-11-16): mask pass guards kept; url and "!" guards neutral, reverted
+
+| state | ours | baseline | ratio |
+|---|---|---|---|
+| + mask passes guarded (pinned A/B vs prior HEAD: 0.690 vs 0.710 s, means 0.705/0.717) | 0.760 s | 1.000 s | 1.316x (coldbench 9, pinned; the machine was slower than in session 7, baseline 1.000 vs 0.770 s) |
+
+- Kept (INLINE item 6): in the mask `#n`, the anyPunctuationOutsideCode replace runs only if `t` has a backtick or a
+  backslash, and the blockSkip replace only if `t` has `[`, a backtick or `<`. Exact: every alternative of those
+  regexes starts at those characters, the test is on the string actually being replaced, and a global replace with
+  no match returns the same string (lastIndex ends at 0 either way; linkInText uses matchAll, which clones).
+- Reverted (INLINE items 7-8, all 7/7 + s7-s10 and 0/150k fuzz diffs, but not faster): url only when `@` is at/after
+  the offset (`aT=e.length-e.lastIndexOf("@")` at #t entry, test `e.length>=aT`) or the char is h/H/f/F/w; "!" skips
+  link/reflink unless `[` follows. A/B: 0.640/0.640 then 0.650 vs 0.630; url guard alone 0.640 vs 0.620, 0.630/0.630.
+- Fuzz: throwaway /tmp/s8fz/fz.mjs (random strings of brackets, backticks, backslashes, `<`, `!`, `@`, urls,
+  emails, emphasis, refs) against vendor/marked/marked.esm.js: 0 diffs.
+- Next: (1) INLINE item 4 / SYNTHESIS item 6, the fast end-of-text-run search instead of the GFM text regex (medium
+  risk; needs a differential fuzz around `@`, `  \n`, `_` word boundaries, www./http(s)/ftp). (2) emStrong: read group
+  5||6 once and `test` for unicodeAlphaNumeric. (3) BLOCK item 2 (first-char dispatch, table/setext pre-filters).
+
 ## Session 7 (2026-11-15): list continuation fast path and fe/mask stack kept; list header cleanup and emStrong spreads neutral, reverted
 
 | state | ours | baseline | ratio |
