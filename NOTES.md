@@ -1,5 +1,32 @@
 # Notes for the next session
 
+## Session 12 (2026-11-16): two exact `#n` reflink guards, both slower, reverted
+
+No parser change kept. Cold numbers unchanged (HEAD pinned A/B medians this session: 0.620-0.660 s).
+
+- Exactness argument (holds for both variants): every `reflinkSearch` match ends with `]` at some source index j
+  (both alternatives end in `\]`, `(?:\[\])?` or the `(?!\()` lookahead), and it starts with `!?[`, so the
+  callback's label `r.slice(r.lastIndexOf("[")+1,-1)` equals `e.slice(e.lastIndexOf("[",j-1)+1,j)`. If no such
+  candidate normalises (`F`) to an own key of `tokens.links`, every callback returns its match, so the replace is
+  the identity (`lastIndexOf` 0 before and after; `linkInText` uses `matchAll`, which clones the regex).
+- Guard hit rate on the practice set: the replace is needed in 1,944 of 5,191 runs, so 3,247 (63%) could skip it.
+- Variant A: `#rl(e,L)` loops over `]` with indexOf and calls `F` on each candidate. 11/11 sets, 0/60k diffs in a
+  targeted ref/label fuzz vs vendor/marked (case variants, `ẞ`/`İ`/`ǅ`, tabs, escaped `]`, backticks, nested
+  brackets, `[x][]`, `![x]`, lists). Pinned A/B (13 runs each): HEAD 0.660 vs WT 0.670, then 0.650 vs 0.670 s.
+- Variant B: like A, but `F` only runs when the char before `]` (ASCII, >32, lowercased) is the last char of some
+  key (a 95-bit table from a for-in over links; `[` right before `]` means an empty label, so it checks for a `""` key).
+  Exact for the same reason: lowercasing an ASCII char doesn't depend on its neighbours, and trim/space-collapse
+  leave a trailing non-space char unchanged. Also 11/11 and 0/60k diffs. Pinned A/B: 0.620 vs 0.640, then 0.640 vs 0.650 s.
+- Takeaway: the reflink replace itself is cheap; with links almost always non-empty, a JS pre-scan of the source
+  costs as much as the regex. Do not retry `#n` reflink guards. (Both variants added a private method to Lexer and
+  grew `#n`; all 4 rounds came out slower, not just neutral.)
+- Not attempted (time box): `punctuation.exec`->`test` was already neutral in session 9; the remaining `exec` calls
+  in the tokenizer use the match contents, so item (2) has no truthiness-only targets left except `url` (session 8,
+  neutral). main.ts JSON: no exact cut found.
+- Next: (1) SYNTHESIS item 7 (block first-char dispatch with table/setext pre-filters), `blockTokens` self 5.4%,
+  is the largest untried structural item. (2) `list` string building (`d+=`, substring of `e`), 10.7% of allocations.
+  (3) `#t` allocations (9.2%): token objects/raw slices per text run.
+
 ## Session 11 (2026-11-16): list allocation cuts neutral, reverted; `#n` pass counts
 
 No parser change kept. Cold numbers unchanged from session 10 (HEAD pinned A/B runs this session: 0.630-0.660 s).
