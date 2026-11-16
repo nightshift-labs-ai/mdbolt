@@ -1,5 +1,27 @@
 # Notes for the next session
 
+## Session 10 (2026-11-16): cold profile of HEAD; no-@/: text regex kept; bigger semi-space no gain
+
+| state | ours | baseline | ratio |
+|---|---|---|---|
+| + text regex without email/mailto/xmpp/ftp:// alternatives when the rest of the source has no `@`/`:` (pinned A/B vs prior HEAD: 0.670 vs 0.690 s, then 0.690 vs 0.700 s; means 0.712/0.728, 0.732/0.756) | 0.690 s | 0.910 s | 1.319x (coldbench 9, pinned; baseline ran faster than session 9's 0.990 s) |
+
+- Cold `--cpu-prof` of 8a60d74 (pinned, one run, 726 ms sampled), self time, top 12:
+  GC 13.5% (98 ms) | `list` 7.5% | main.ts top level 6.5% (47 ms: JSON parse/stringify + loop) | mask `#n` 5.9% |
+  `blockTokens` 5.4% | `#t` 4.8% | GFM text RegExp 3.5% | `emStrong` 2.9% | `parseInline` 2.6% | `link` 2.3% |
+  `__require` (Node's internal loader for TS stripping, 15 ms; also paid by any .ts null entry) 2.0% | `#e` 1.8%.
+  Non-lexing share: GC + main.ts + loader ~22%. Block-rule RegExp (paragraph interrupt) 1.6%, `table` 1.4%, `lex` 1.3%.
+- Kept: `inlineText(l, l.length<nE)` with `nE=e.length-max(lastIndexOf("@"),lastIndexOf(":"))` computed at `#t`
+  entry (the remaining `e` is a suffix, so it holds `@`/`:` iff its length >= nE). `textNE` drops only alternatives
+  that need `@` or `:`. Pitfall found by the fuzz: marked's `protocol` expands UNGROUPED, so `protocol:\/\/` is
+  really `[hH][tT][tT][pP][sS]?|[fF][tT][pP]:\/\/` (bare "http"/"https" ends a text run); keep that alternative.
+  `zt` (breaks) sets `textNE:null` so it falls back to its own text rule. 0 diffs in 200k regex-vs-regex + 50k docs.
+- Tried, no gain: `--max-semi-space-size=32/64` on the command line (5 pinned runs each, all within noise), so
+  setting it from inside the program is not worth pursuing.
+- Next: (1) GC 13.5% is the largest item: cut allocations per token (list item `split`/`substring`, token object
+  shapes, the mask string copies in `#n`). (2) `#n` 5.9% self: profile which pass dominates now. (3) SYNTHESIS item 7
+  (block first-char dispatch) since `blockTokens` self is 5.4%. main.ts JSON work (47 ms) has no exact cut found.
+
 ## Session 9 (2026-11-16): emStrong `test` + group 5||6 once kept; fast text-run scan and punctuation `test` reverted
 
 | state | ours | baseline | ratio |
