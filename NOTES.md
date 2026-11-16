@@ -18,6 +18,9 @@
   `zt` (breaks) sets `textNE:null` so it falls back to its own text rule. 0 diffs in 200k regex-vs-regex + 50k docs.
 - Tried, no gain: `--max-semi-space-size=32/64` on the command line (5 pinned runs each, all within noise), so
   setting it from inside the program is not worth pursuing.
+- Reverted (exact, 11/11 + 0 fuzz diffs, but not clearly faster): skip the `#n` reflinkSearch replace when
+  `tokens.links` has no keys (`#hk` for-in check; with no links the callback returns every match unchanged).
+  A/B 0.740 vs 0.700 s, then 0.750 vs 0.800 s (noisy machine, means 0.85/0.80 and 0.81/0.84).
 - Next: (1) GC 13.5% is the largest item: cut allocations per token (list item `split`/`substring`, token object
   shapes, the mask string copies in `#n`). (2) `#n` 5.9% self: profile which pass dominates now. (3) SYNTHESIS item 7
   (block first-char dispatch) since `blockTokens` self is 5.4%. main.ts JSON work (47 ms) has no exact cut found.
