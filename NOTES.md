@@ -1,5 +1,28 @@
 # Notes for the next session
 
+## Session 9 (2026-11-16): emStrong `test` + group 5||6 once kept; fast text-run scan and punctuation `test` reverted
+
+| state | ours | baseline | ratio |
+|---|---|---|---|
+| + emStrong `unicodeAlphaNumeric.test(n)` and `z=s[5]\|\|s[6]` read once (pinned A/B vs prior HEAD: 0.670 vs 0.700 s, means 0.716/0.735) | 0.690 s | 0.990 s | 1.435x (coldbench 9, pinned `NODE` wrapper `exec taskset -c 3 node "$@"`) |
+
+- Kept: `unicodeAlphaNumeric` is `/[\p{L}\p{N}]/u` (not g/y), so `test` has the same truthiness as `match`. The RDelim
+  loop's `else if(s[5]||s[6]||R){if(o&&(s[5]||s[6]))` becomes `let z=s[5]||s[6];if(z||R){if(o&&z)` (the branch
+  before it always `continue`s). Keep truthiness here, not `!==void 0`, unless you prove that groups 5/6 never match "".
+- Reverted, exact (0/300k diffs in a direct inlineText-vs-regex fuzz plus full docs, 11/11 sets) but SLOWER: SYNTHESIS
+  item 6, a charCode scan for the end of the GFM text run (stop chars, ci "http", "www." after `[\s*_~(]`, a 2+ space
+  run before `\n`, fallback to the regex on `@`/`:` or on an email-char run from the stop that reaches `@`). Pinned A/B
+  0.750 vs 0.670 s twice. In cold runs the JS loop (interpreter/baseline tier) costs more than irregexp's native
+  code. Do not retry it as a JS scan. A cheaper regex without the email/mailto alternatives when there is no `@`/`:`
+  is still untested.
+- Reverted (neutral): `punctuation.test` instead of `!!punctuation.exec` in emStrong (x2) and del (`/u`, exact):
+  0.620 vs 0.630, then 0.640 vs 0.620 s.
+- Pitfall: re-run `git archive HEAD` into /tmp/abhead after every commit, or the A/B compares against a stale HEAD.
+- Next: (1) SYNTHESIS item 7 (block first-char dispatch with table/setext pre-filters; sessions 3-4 found the plain
+  forms neutral, so only try it combined with a measured cold profile). (2) A fresh cold `--cpu-prof` to re-rank
+  what is left. (3) The text regex without email/mailto alternatives, gated by `@`/`:` absence via `lastIndexOf`
+  offsets at `#t` entry.
+
 ## Session 8 (2026-11-16): mask pass guards kept; url and "!" guards neutral, reverted
 
 | state | ours | baseline | ratio |
