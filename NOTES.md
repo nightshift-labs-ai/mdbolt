@@ -13,6 +13,13 @@ No parser change kept. Cold numbers unchanged from session 10 (HEAD pinned A/B r
 - `#n` pass counts on the practice set (instrumented /tmp copy): 11,894 calls over 2.19 MB of inline source
   (avg 184 chars). Reflink replace runs 5,191 times, only 46 of them with an empty `tokens.links` (that is why
   session 10's empty-links skip was neutral). Punctuation pass 5,628 runs, blockSkip pass 7,059 runs.
+- Allocation profile (inspector `HeapProfiler.startSampling` with `includeObjectsCollectedByMinorGC/MajorGC:true`,
+  interval 4096, one pass over the practice set; plain `node --heap-prof` reports only LIVE objects, useless for
+  GC churn): 203 MB allocated. Self: RegExp `exec` (match arrays + capture strings) 42.6 MB 21% | `replace` 24.2 MB
+  12% | (top level) 21.7 MB | `list` 21.7 MB 10.7% | `#t` 18.8 MB 9.2% | `inlineTokens` 10.2 MB | `emStrong` 7.9 MB |
+  `blockTokens` 7.8 MB | `parseInline` 7.5 MB | `repeat` (mask "a"/"+" fills) 3.3 MB | `split` 2.1 MB.
+  So the GC targets are exec match arrays (use `test`/`sticky` + `lastIndex` where only the match end or
+  truthiness is used), the `#n` replace copies, and `list`'s string building (`d+=...`, `substring`/`slice` of `e`).
 - Next: (1) `#n` reflink pass: most docs define refs, so a skip needs something else, e.g. run it only when the
   source has `]` followed by `[` or a label that is in `links` (prove it exactly; the callback is a no-op for
   labels not in `links`). (2) GC 13.5%: allocation-profile first (`--heap-prof` or `--trace-gc` counts on a cold
