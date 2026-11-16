@@ -1,5 +1,29 @@
 # Notes for the next session
 
+## Session 13 (2026-11-16): SYNTHESIS item 7 (block dispatch + table/setext pre-filters), not faster, reverted
+
+No parser change kept. Cold numbers unchanged (HEAD pinned A/B medians this session: 0.630-0.680 s).
+
+- (1) main.ts: no exact saving found. Its self time is the native JSON.parse/JSON.stringify of ~3 MB plus
+  readFileSync's UTF-8 decode; the 720-iteration loop itself costs nothing. A latin1 read is only exact for ASCII input. Skipped.
+- (2) exec->test: nothing new (see session 12: the remaining tokenizer `exec` calls use the match contents).
+- (3a) Block first-char dispatch in `blockTokens`: code/fences/heading/hr/blockquote/list/html/def run only when
+  `c0<65||c0 is [ _ \` ~` (their regexes all need a space, tab, `#*+-<>`, a digit, or `[`, `_`, `` ` ``, `~` first;
+  html's `/i` doesn't affect `<`). 11/11 sets, 0/60k diffs in a block-start fuzz vs vendor/marked. Pinned A/B
+  (13 each): 0.680 vs HEAD 0.670 (fuzz was running on other cores), then 0.660 vs 0.680 with means 0.679 vs 0.676: neutral.
+  The 8 skipped regexes fail at index 0, so they were almost free.
+- (3b) Dispatch + table pre-filter (the first `\n`, then up to 3 spaces, must be followed by `|`, `:` or `-`) +
+  setext pre-filter (JS loop over lines: lheading can match only if some `\n` + up to 3 spaces + `=`/`-` comes before
+  the first `\n[ \t]*\n`, because the content can't contain a `\n` followed by a blank line). 11/11, 0/80k diffs.
+  Pinned A/B: 0.680 vs 0.670, 0.710 vs 0.650 s: SLOWER. The per-line JS loop costs more than the lheading regex.
+- (3c) Table pre-filter alone: 0.660/0.660, 0.640 vs 0.630, 21 runs 0.630/0.630 (means 0.670/0.679,
+  0.632/0.640, 0.647/0.648): neutral, reverted.
+- Takeaway: block-level regex pre-checks are worn out (same result as sessions 5/6). Failing anchored regexes are cheap.
+- Next, ranked: (1) `#t` allocations (9.2% of bytes): token objects/raw slices per text run (but see "Do not try":
+  offsets instead of substrings, skipping the raw concatenation). (2) `list` string building (`d+=`). (3) A paragraph-
+  first ordering for letter-start lines would skip table+lheading, but is only exact if paragraph's lookahead stops at
+  every setext/table start. Re-derive that before trying.
+
 ## Session 12 (2026-11-16): two exact `#n` reflink guards, both slower, reverted
 
 No parser change kept. Cold numbers unchanged (HEAD pinned A/B medians this session: 0.620-0.660 s).
